@@ -13,7 +13,7 @@ type visitor interface {
 
 type binaryExpr struct {
 	left     expr
-	operator token
+	operator *token
 	right    expr
 }
 
@@ -38,7 +38,7 @@ func (e literalExpr) accept(v visitor) interface{} {
 }
 
 type unaryExpr struct {
-	operator token
+	operator *token
 	right    expr
 }
 

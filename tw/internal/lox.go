@@ -8,7 +8,8 @@ import (
 )
 
 type Lox struct {
-	hadError bool
+	hadError        bool
+	hadRuntimeError bool
 }
 
 func (l *Lox) error(line int, message string) {
@@ -20,30 +21,35 @@ func (l *Lox) report(line int, where string, message string) {
 	l.hadError = true
 }
 
+func (l *Lox) errorToken(token *token, message string) {
+	if token.ttype == EOF {
+		l.report(token.line, "at end", message)
+	} else {
+		l.report(token.line, "at '"+token.lexeme+"'", message)
+	}
+}
+
+func (l *Lox) runtimeError(error RuntimeError) {
+	log.Printf("%s\n[line %d]", error.Message, error.Token.line)
+	l.hadRuntimeError = true
+}
+
 func (l *Lox) run(source string) {
 	scanner := newScanner(source)
 	tokens := scanner.scanTokens()
+	parser := newParser(tokens)
+	expr := parser.parse()
 
-	for _, token := range tokens {
-		fmt.Println(token)
+	if l.hadError {
+		return
 	}
+
+	interpreter := interpreter{}
+	interpreter.interpret(expr)
 }
 
 func (l *Lox) RunPrompt() {
 	scanner := bufio.NewScanner(os.Stdin)
-
-	e := binaryExpr{
-		left: unaryExpr{
-			token{MINUS, "-", nil, 1},
-			literalExpr{123},
-		},
-		operator: token{STAR, "*", nil, 1},
-		right: groupingExpr{
-			literalExpr{45.67},
-		},
-	}
-
-	fmt.Println(e.accept(astPrinter{}).(string))
 
 	for scanner.Scan() {
 		fmt.Print("> ")
@@ -54,17 +60,21 @@ func (l *Lox) RunPrompt() {
 
 var Program = &Lox{}
 
-// func (l *Lox) runFile(path string) error {
-// 	fd, err := os.ReadFile(path)
-// 	if err != nil {
-// 		return err
-// 	}
+func (l *Lox) runFile(path string) error {
+	fd, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
 
-// 	l.run(string(fd))
+	l.run(string(fd))
 
-// 	if l.HadError {
-// 		os.Exit(65)
-// 	}
+	if l.hadError {
+		os.Exit(65)
+	}
 
-// 	return nil
-// }
+	if l.hadRuntimeError {
+		os.Exit(70)
+	}
+
+	return nil
+}
