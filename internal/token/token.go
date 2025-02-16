@@ -1,4 +1,4 @@
-package internal
+package token
 
 import "fmt"
 
@@ -54,22 +54,22 @@ const (
 	EOF TokenType = "EOF"
 )
 
-type token struct {
-	ttype   TokenType
-	lexeme  string
-	literal interface{}
-	line    int
+type Token struct {
+	Type    TokenType
+	Lexeme  string
+	Literal interface{}
+	Line    int
 }
 
-func newToken(ttype TokenType, lexeme string, literal interface{}, line int) *token {
-	return &token{
-		ttype:   ttype,
-		lexeme:  lexeme,
-		literal: literal,
-		line:    line,
+func New(ttype TokenType, lexeme string, literal interface{}, line int) *Token {
+	return &Token{
+		Type:    ttype,
+		Lexeme:  lexeme,
+		Literal: literal,
+		Line:    line,
 	}
 }
 
-func (t *token) String() string {
-	return fmt.Sprintf("%s %s %v", t.ttype, t.lexeme, t.literal)
+func (t *Token) String() string {
+	return fmt.Sprintf("%s %s %v", t.Type, t.Lexeme, t.Literal)
 }

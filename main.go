@@ -4,7 +4,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/sjsanc/golox/internal"
+	"github.com/sjsanc/golox/internal/lox"
 )
 
 func main() {
@@ -14,5 +14,6 @@ func main() {
 		os.Exit(64)
 	}
 
-	internal.Program.RunPrompt()
+	Program := lox.NewLox() // Use constructor to maintain state
+	Program.RunPrompt()
 }
