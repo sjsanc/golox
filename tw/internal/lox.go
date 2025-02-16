@@ -32,6 +32,19 @@ func (l *Lox) run(source string) {
 func (l *Lox) RunPrompt() {
 	scanner := bufio.NewScanner(os.Stdin)
 
+	e := binaryExpr{
+		left: unaryExpr{
+			token{MINUS, "-", nil, 1},
+			literalExpr{123},
+		},
+		operator: token{STAR, "*", nil, 1},
+		right: groupingExpr{
+			literalExpr{45.67},
+		},
+	}
+
+	fmt.Println(e.accept(astPrinter{}).(string))
+
 	for scanner.Scan() {
 		fmt.Print("> ")
 		l.run(scanner.Text())

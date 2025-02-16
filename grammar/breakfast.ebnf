@@ -1,0 +1,29 @@
+// 1
+breakfast  → protein "with" breakfast "on the side" ;
+breakfast  → protein ;
+breakfast  → bread ;
+
+protein    → crispiness "crispy" "bacon" ;
+protein    → "sausage" ;
+protein    → cooked "eggs" ;
+
+crispiness → "really" ;
+crispiness → "really" crispiness ;
+
+cooked     → "scrambled" ;
+cooked     → "poached" ;
+cooked     → "fried" ;
+
+bread      → "toast" ;
+bread      → "biscuits" ;
+bread      → "English muffin" ;
+
+// 2
+breakfast  → protein ( "with" breakfast "on the side" )?
+           | bread ; 
+
+protein    → "really"+ "cripsy" "bacon"
+           | "sausage"
+           | ( "scrambled" | "poached" | "fried" ) "eggs" ;
+
+bread      → "toast" | "biscuits" | "English muffin" ;
