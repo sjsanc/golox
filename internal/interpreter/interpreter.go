@@ -11,178 +11,298 @@ import (
 )
 
 type Interpreter struct {
+	globals     *environment.Environment
 	environment *environment.Environment
 }
 
 func NewInterpreter() *Interpreter {
+	globals := environment.NewGlobalEnvironment()
+
+	globals.Define("clock", &ClockBuiltin{})
+
 	return &Interpreter{
-		environment: environment.NewGlobalEnvironment(),
+		globals:     globals,
+		environment: globals,
 	}
 }
 
-func (i *Interpreter) Interpret(stmts []stmt.Stmt) {
+func (i *Interpreter) Interpret(stmts []stmt.Stmt) error {
 	for _, stmt := range stmts {
-		i.execute(stmt)
+		_, err := i.execute(stmt)
+		if err != nil {
+			return err
+		}
 	}
-}
-
-func (i *Interpreter) VisitBlockStmt(stmt stmt.Block) interface{} {
-	i.executeBlock(stmt.Statements, environment.NewEnvironment(i.environment))
 	return nil
 }
 
-func (i *Interpreter) VisitLiteralExpr(expr expr.Literal) interface{} {
-	return expr.Value
+func (i *Interpreter) evaluate(expr expr.Expr) (interface{}, error) {
+	return expr.Accept(i)
 }
 
-func (i *Interpreter) VisitLogicalExpr(expr expr.Logical) interface{} {
-	left := i.evaluate(expr.Left)
+func (i *Interpreter) execute(s stmt.Stmt) (stmt.ReturnValue, error) {
+	result, err := s.Accept(i)
+	if err != nil {
+		return stmt.ReturnValue{}, err
+	}
+	return result, nil
+}
+
+func (i *Interpreter) executeBlock(stmts []stmt.Stmt, env *environment.Environment) (stmt.ReturnValue, error) {
+	prev := i.environment
+	i.environment = env
+	defer func() { i.environment = prev }()
+
+	for _, s := range stmts {
+		result, err := i.execute(s)
+		if err != nil {
+			return stmt.ReturnValue{}, err
+		}
+		if result.IsReturn {
+			return result, nil
+		}
+	}
+	return stmt.ReturnValue{}, nil
+}
+
+// ================================================================================
+// ### EXPR VISITORS
+// ================================================================================
+
+func (i *Interpreter) VisitLiteralExpr(expr expr.Literal) (interface{}, error) {
+	return expr.Value, nil
+}
+
+func (i *Interpreter) VisitLogicalExpr(expr expr.Logical) (interface{}, error) {
+	left, err := i.evaluate(expr.Left)
+	if err != nil {
+		return nil, err
+	}
 
 	if expr.Operator.Type == token.OR {
 		if isTruthy(left) {
-			return left
+			return left, nil
 		}
 	} else {
 		if !isTruthy(left) {
-			return left
+			return left, nil
 		}
 	}
 
 	return i.evaluate(expr.Right)
 }
 
-func (i *Interpreter) VisitGroupingExpr(expr expr.Grouping) interface{} {
+func (i *Interpreter) VisitGroupingExpr(expr expr.Grouping) (interface{}, error) {
 	return i.evaluate(expr.Expr)
 }
 
-func (i *Interpreter) VisitUnaryExpr(expr expr.Unary) interface{} {
-	right := i.evaluate(expr.Right)
+func (i *Interpreter) VisitUnaryExpr(expr expr.Unary) (interface{}, error) {
+	right, err := i.evaluate(expr.Right)
+	if err != nil {
+		return nil, err
+	}
 
 	switch expr.Operator.Type {
 	case token.MINUS:
 		checkNumOperand(expr.Operator, right)
-		return -(right.(int))
+		return -(right.(int)), nil
 	case token.BANG:
-		return !isTruthy(right)
+		return !isTruthy(right), nil
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (i *Interpreter) VisitVariableExpr(expr expr.Variable) interface{} {
+func (i *Interpreter) VisitVariableExpr(expr expr.Variable) (interface{}, error) {
 	value, err := i.environment.Get(expr.Name)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return value
+	return value, nil
 }
 
-func (i *Interpreter) VisitBinaryExpr(expr expr.Binary) interface{} {
-	left := i.evaluate(expr.Left)
-	right := i.evaluate(expr.Right)
+func (i *Interpreter) VisitBinaryExpr(expr expr.Binary) (interface{}, error) {
+	left, err := i.evaluate(expr.Left)
+	if err != nil {
+		return nil, err
+	}
+	right, err := i.evaluate(expr.Right)
+	if err != nil {
+		return nil, err
+	}
 
 	switch expr.Operator.Type {
 	case token.MINUS:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) - right.(int)
+		return left.(int) - right.(int), nil
 	case token.SLASH:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) / right.(int)
+		return left.(int) / right.(int), nil
 	case token.STAR:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) * right.(int)
+		return left.(int) * right.(int), nil
 	case token.PLUS:
 		if l, ok := left.(int); ok {
 			if r, ok := right.(int); ok {
-				return l + r
+				return l + r, nil
 			}
 		}
 	case token.GREATER:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) > right.(int)
+		return left.(int) > right.(int), nil
 	case token.GREATER_EQUAL:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) >= right.(int)
+		return left.(int) >= right.(int), nil
 	case token.LESS:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) < right.(int)
+		return left.(int) < right.(int), nil
 	case token.LESS_EQUAL:
 		checkNumOperands(expr.Operator, left, right)
-		return left.(int) <= right.(int)
+		return left.(int) <= right.(int), nil
 	case token.BANG_EQUAL:
-		return !isEqual(left, right)
+		return !isEqual(left, right), nil
 	case token.EQUAL_EQUAL:
-		return isEqual(left, right)
+		return isEqual(left, right), nil
 	}
 
-	return nil
+	return nil, nil
 }
 
-func (i *Interpreter) VisitExpressionStmt(stmt stmt.Expression) interface{} {
-	i.evaluate(stmt.Expression)
-	return nil
-}
-
-func (i *Interpreter) VisitIfStmt(stmt stmt.If) interface{} {
-	if isTruthy(i.evaluate(stmt.Condition)) {
-		i.execute(stmt.ThenBranch)
-	} else if stmt.ElseBranch != nil {
-		i.execute(stmt.ElseBranch)
-	}
-	return nil
-}
-
-func (i *Interpreter) VisitPrintStmt(stmt stmt.Print) interface{} {
-	value := i.evaluate(stmt.Expression)
-	fmt.Printf("%v\n", value)
-	return nil
-}
-
-func (i *Interpreter) VisitVarStmt(stmt stmt.Var) interface{} {
-	var value interface{}
-	if stmt.Initializer != nil {
-		value = i.evaluate(stmt.Initializer)
-	}
-	i.environment.Define(stmt.Name.Lexeme, value)
-	return nil
-}
-
-func (i *Interpreter) VisitWhileStmt(stmt stmt.While) interface{} {
-	for isTruthy(i.evaluate(stmt.Condition)) {
-		i.execute(stmt.Body)
-	}
-	return nil
-}
-
-func (i *Interpreter) VisitAssignExpr(expr expr.Assign) interface{} {
-	value := i.evaluate(expr.Value)
-	err := i.environment.Assign(expr.Name, value)
+func (i *Interpreter) VisitCallExpr(expr expr.Call) (interface{}, error) {
+	callee, err := i.evaluate(expr.Callee)
 	if err != nil {
-		panic(err)
-	}
-	return value
-}
-
-func (i *Interpreter) evaluate(expr expr.Expr) interface{} {
-	return expr.Accept(i)
-}
-
-func (i *Interpreter) execute(stmt stmt.Stmt) {
-	stmt.Accept(i)
-}
-
-func (i *Interpreter) executeBlock(stmts []stmt.Stmt, env *environment.Environment) {
-	prev := i.environment
-
-	i.environment = env
-	for _, stmt := range stmts {
-		i.execute(stmt)
+		return nil, err
 	}
 
-	i.environment = prev
+	args := make([]interface{}, 0)
+	for _, arg := range expr.Args {
+		argVal, err := i.evaluate(arg)
+		if err != nil {
+			return nil, err
+		}
+		args = append(args, argVal)
+	}
 
-	// Catch error from execute with i.environment = prev
+	function, ok := callee.(Callable)
+	if !ok {
+		return nil, errors.RuntimeErr{Token: expr.Paren, Message: "Can only call functions and classes"}
+	}
+
+	if len(args) != function.Arity() {
+		return nil, errors.RuntimeErr{Token: expr.Paren, Message: fmt.Sprintf("Expected %d arguments but got %d", function.Arity(), len(args))}
+	}
+
+	return function.Call(i, args)
 }
+
+func (i *Interpreter) VisitAssignExpr(expr expr.Assign) (interface{}, error) {
+	value, err := i.evaluate(expr.Value)
+	if err != nil {
+		return nil, err
+	}
+	err = i.environment.Assign(expr.Name, value)
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// ================================================================================
+// ### STMT VISITORS
+// ================================================================================
+
+func (i *Interpreter) VisitBlockStmt(stmt stmt.Block) (stmt.ReturnValue, error) {
+	return i.executeBlock(stmt.Statements, environment.NewEnvironment(i.environment))
+}
+
+func (i *Interpreter) VisitExpressionStmt(s stmt.Expression) (stmt.ReturnValue, error) {
+	_, err := i.evaluate(s.Expression)
+	if err != nil {
+		return stmt.ReturnValue{}, err
+	}
+	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) VisitFunctionStmt(s stmt.Function) (stmt.ReturnValue, error) {
+	fn := &Function{declaration: s}
+	i.environment.Define(s.Name.Lexeme, fn)
+	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) VisitIfStmt(s stmt.If) (stmt.ReturnValue, error) {
+	val, err := i.evaluate(s.Condition)
+	if err != nil {
+		return stmt.ReturnValue{}, err
+	}
+
+	if isTruthy(val) {
+		return i.execute(s.ThenBranch)
+	} else if s.ElseBranch != nil {
+		return i.execute(s.ElseBranch)
+	}
+
+	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) VisitPrintStmt(s stmt.Print) (stmt.ReturnValue, error) {
+	val, err := i.evaluate(s.Expression)
+	if err != nil {
+		return stmt.ReturnValue{}, err
+	}
+	fmt.Printf("%v\n", val)
+	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) VisitReturnStmt(s stmt.Return) (stmt.ReturnValue, error) {
+	var value interface{}
+	if s.Value != nil {
+		var err error
+		value, err = i.evaluate(s.Value)
+		if err != nil {
+			return stmt.ReturnValue{}, err
+		}
+	}
+	return stmt.ReturnValue{Value: value, IsReturn: true}, nil
+}
+
+func (i *Interpreter) VisitVarStmt(s stmt.Var) (stmt.ReturnValue, error) {
+	var value interface{}
+	if s.Initializer != nil {
+		var err error
+		value, err = i.evaluate(s.Initializer)
+		if err != nil {
+			return stmt.ReturnValue{}, err
+		}
+	}
+	i.environment.Define(s.Name.Lexeme, value)
+	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) VisitWhileStmt(s stmt.While) (stmt.ReturnValue, error) {
+	for {
+		val, err := i.evaluate(s.Condition)
+		if err != nil {
+			return stmt.ReturnValue{}, err
+		}
+
+		if !isTruthy(val) {
+			break
+		}
+
+		result, err := i.execute(s.Body)
+		if err != nil {
+			return stmt.ReturnValue{}, err
+		}
+		if result.IsReturn {
+			return result, nil
+		}
+	}
+	return stmt.ReturnValue{}, nil
+}
+
+// ================================================================================
+// ### HELPERS
+// ================================================================================
 
 func checkNumOperand(operator *token.Token, operand interface{}) {
 	if _, ok := operand.(int); !ok {

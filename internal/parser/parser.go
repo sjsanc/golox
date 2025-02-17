@@ -38,6 +38,10 @@ func (p *Parser) declaration() stmt.Stmt {
 		return nil
 	}
 
+	if p.match(token.FUN) {
+		return p.function("function")
+	}
+
 	if p.match(token.VAR) {
 		return p.varDeclaration()
 	}
@@ -54,6 +58,9 @@ func (p *Parser) statement() stmt.Stmt {
 	}
 	if p.match(token.PRINT) {
 		return p.printStatement()
+	}
+	if p.match(token.RETURN) {
+		return p.returnStatement()
 	}
 	if p.match(token.WHILE) {
 		return p.whileStatement()
@@ -127,6 +134,16 @@ func (p *Parser) printStatement() stmt.Stmt {
 	return stmt.Print{Expression: value}
 }
 
+func (p *Parser) returnStatement() stmt.Stmt {
+	keyword := p.previous()
+	var value expr.Expr
+	if !p.check(token.SEMICOLON) {
+		value = p.expression()
+	}
+	p.consume(token.SEMICOLON, "Expect ';' after return value.")
+	return stmt.Return{Keyword: keyword, Value: value}
+}
+
 func (p *Parser) varDeclaration() stmt.Stmt {
 	name := p.consume(token.IDENTIFIER, "Expect variable name.")
 
@@ -144,7 +161,6 @@ func (p *Parser) whileStatement() stmt.Stmt {
 	condition := p.expression()
 	p.consume(token.RIGHT_PAREN, "Expect ')' after condition.")
 	body := p.statement()
-
 	return stmt.While{Condition: condition, Body: body}
 }
 
@@ -152,6 +168,26 @@ func (p *Parser) expressionStatement() stmt.Stmt {
 	value := p.expression()
 	p.consume(token.SEMICOLON, "Expect ';' after value.")
 	return stmt.Expression{Expression: value}
+}
+
+func (p *Parser) function(kind string) stmt.Stmt {
+	name := p.consume(token.IDENTIFIER, "Expect "+kind+" name.")
+	p.consume(token.LEFT_PAREN, "Expect '(' after "+kind+" name.")
+	params := make([]*token.Token, 0)
+	if !p.check(token.RIGHT_PAREN) {
+		params = append(params, p.consume(token.IDENTIFIER, "Expect parameter name."))
+		for p.match(token.COMMA) {
+			if len(params) >= 255 {
+				p.error(p.peek().Line, "Cannot have more than 255 parameters.")
+			}
+			params = append(params, p.consume(token.IDENTIFIER, "Expect parameter name."))
+		}
+	}
+	p.consume(token.RIGHT_PAREN, "Expect ')' after parameters.")
+
+	p.consume(token.LEFT_BRACE, "Expect '{' before "+kind+" body.")
+	body := p.block()
+	return stmt.Function{Name: name, Params: params, Body: body}
 }
 
 func (p *Parser) block() []stmt.Stmt {
@@ -177,7 +213,7 @@ func (p *Parser) assignment() expr.Expr {
 			return expr.Assign{Name: name, Value: value}
 		}
 
-		p.err(equals.Line, "Invalid assignment target.")
+		p.error(equals.Line, "Invalid assignment target.")
 	}
 
 	return e
@@ -260,7 +296,36 @@ func (p *Parser) unary() expr.Expr {
 		right := p.unary()
 		return expr.Unary{Operator: operator, Right: right}
 	}
-	return p.primary()
+	return p.call()
+}
+
+func (p *Parser) finishCall(callee expr.Expr) expr.Expr {
+	arguments := make([]expr.Expr, 0)
+	if !p.check(token.RIGHT_PAREN) {
+		arguments = append(arguments, p.expression())
+		for p.match(token.COMMA) {
+			if len(arguments) >= 255 {
+				p.error(p.peek().Line, "Cannot have more than 255 arguments.")
+			}
+			arguments = append(arguments, p.expression())
+		}
+	}
+	paren := p.consume(token.RIGHT_PAREN, "Expect ')' after arguments.")
+	return expr.Call{Callee: callee, Paren: paren, Args: arguments}
+}
+
+func (p *Parser) call() expr.Expr {
+	e := p.primary()
+
+	for {
+		if p.match(token.LEFT_PAREN) {
+			e = p.finishCall(e)
+		} else {
+			break
+		}
+	}
+
+	return e
 }
 
 // primary → NUMBER | STRING | "false" | "true" | "nil"
@@ -287,7 +352,7 @@ func (p *Parser) primary() expr.Expr {
 		return expr.Grouping{Expr: e}
 	}
 
-	p.err(p.peek().Line, "Expect expression.")
+	p.error(p.peek().Line, "Expect expression.")
 	return nil
 }
 
@@ -351,7 +416,7 @@ func (p *Parser) synchronize() {
 	}
 }
 
-func (s *Parser) err(line int, message string) {
+func (s *Parser) error(line int, message string) {
 	fmt.Println("Error: ", line, message)
 	s.hadError = true
 }
