@@ -28,12 +28,21 @@ func (a ASTPrinter) VisitLiteralExpr(e expr.Literal) interface{} {
 	return fmt.Sprintf("%v", e.Value)
 }
 
+func (a ASTPrinter) VisitLogicalExpr(e expr.Logical) interface{} {
+	return a.parenthesize(e.Operator.Lexeme, e.Left, e.Right)
+}
+
 func (a ASTPrinter) VisitUnaryExpr(e expr.Unary) interface{} {
 	return a.parenthesize(e.Operator.Lexeme, e.Right)
 }
 
 func (a ASTPrinter) VisitVariableExpr(e expr.Variable) interface{} {
 	return e.Name.Lexeme
+}
+
+func (a ASTPrinter) VisitAssignExpr(e expr.Assign) interface{} {
+	// return a.parenthesize("=", e.Name.Lexeme, e.Value)
+	return ""
 }
 
 func (a ASTPrinter) parenthesize(name string, exprs ...expr.Expr) string {

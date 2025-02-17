@@ -16,7 +16,7 @@ type Interpreter struct {
 
 func NewInterpreter() *Interpreter {
 	return &Interpreter{
-		environment: environment.NewEnvironment(),
+		environment: environment.NewGlobalEnvironment(),
 	}
 }
 
@@ -26,8 +26,29 @@ func (i *Interpreter) Interpret(stmts []stmt.Stmt) {
 	}
 }
 
+func (i *Interpreter) VisitBlockStmt(stmt stmt.Block) interface{} {
+	i.executeBlock(stmt.Statements, environment.NewEnvironment(i.environment))
+	return nil
+}
+
 func (i *Interpreter) VisitLiteralExpr(expr expr.Literal) interface{} {
 	return expr.Value
+}
+
+func (i *Interpreter) VisitLogicalExpr(expr expr.Logical) interface{} {
+	left := i.evaluate(expr.Left)
+
+	if expr.Operator.Type == token.OR {
+		if isTruthy(left) {
+			return left
+		}
+	} else {
+		if !isTruthy(left) {
+			return left
+		}
+	}
+
+	return i.evaluate(expr.Right)
 }
 
 func (i *Interpreter) VisitGroupingExpr(expr expr.Grouping) interface{} {
@@ -102,6 +123,15 @@ func (i *Interpreter) VisitExpressionStmt(stmt stmt.Expression) interface{} {
 	return nil
 }
 
+func (i *Interpreter) VisitIfStmt(stmt stmt.If) interface{} {
+	if isTruthy(i.evaluate(stmt.Condition)) {
+		i.execute(stmt.ThenBranch)
+	} else if stmt.ElseBranch != nil {
+		i.execute(stmt.ElseBranch)
+	}
+	return nil
+}
+
 func (i *Interpreter) VisitPrintStmt(stmt stmt.Print) interface{} {
 	value := i.evaluate(stmt.Expression)
 	fmt.Printf("%v\n", value)
@@ -117,12 +147,41 @@ func (i *Interpreter) VisitVarStmt(stmt stmt.Var) interface{} {
 	return nil
 }
 
+func (i *Interpreter) VisitWhileStmt(stmt stmt.While) interface{} {
+	for isTruthy(i.evaluate(stmt.Condition)) {
+		i.execute(stmt.Body)
+	}
+	return nil
+}
+
+func (i *Interpreter) VisitAssignExpr(expr expr.Assign) interface{} {
+	value := i.evaluate(expr.Value)
+	err := i.environment.Assign(expr.Name, value)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
 func (i *Interpreter) evaluate(expr expr.Expr) interface{} {
 	return expr.Accept(i)
 }
 
 func (i *Interpreter) execute(stmt stmt.Stmt) {
 	stmt.Accept(i)
+}
+
+func (i *Interpreter) executeBlock(stmts []stmt.Stmt, env *environment.Environment) {
+	prev := i.environment
+
+	i.environment = env
+	for _, stmt := range stmts {
+		i.execute(stmt)
+	}
+
+	i.environment = prev
+
+	// Catch error from execute with i.environment = prev
 }
 
 func checkNumOperand(operator *token.Token, operand interface{}) {
