@@ -224,7 +224,7 @@ func (i *Interpreter) VisitExpressionStmt(s stmt.Expression) (stmt.ReturnValue, 
 }
 
 func (i *Interpreter) VisitFunctionStmt(s stmt.Function) (stmt.ReturnValue, error) {
-	fn := &Function{declaration: s}
+	fn := NewFunction(s, i.environment)
 	i.environment.Define(s.Name.Lexeme, fn)
 	return stmt.ReturnValue{}, nil
 }

@@ -15,5 +15,5 @@ func main() {
 	}
 
 	Program := lox.NewLox() // Use constructor to maintain state
-	Program.RunPrompt()
+	Program.RunFile("test.lox")
 }

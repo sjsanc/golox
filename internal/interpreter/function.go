@@ -9,6 +9,14 @@ import (
 
 type Function struct {
 	declaration stmt.Function
+	closure     *environment.Environment
+}
+
+func NewFunction(declaration stmt.Function, closure *environment.Environment) *Function {
+	return &Function{
+		declaration: declaration,
+		closure:     closure,
+	}
 }
 
 func (f *Function) Arity() int {
@@ -16,7 +24,7 @@ func (f *Function) Arity() int {
 }
 
 func (f *Function) Call(interpreter *Interpreter, args []interface{}) (interface{}, error) {
-	env := environment.NewEnvironment(interpreter.globals)
+	env := environment.NewEnvironment(f.closure)
 	for i, param := range f.declaration.Params {
 		env.Define(param.Lexeme, args[i])
 	}
