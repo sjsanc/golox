@@ -7,6 +7,7 @@ import (
 
 	"github.com/sjsanc/golox/internal/interpreter"
 	"github.com/sjsanc/golox/internal/parser"
+	"github.com/sjsanc/golox/internal/resolver"
 	"github.com/sjsanc/golox/internal/scanner"
 )
 
@@ -24,19 +25,27 @@ func NewLox() *Lox {
 
 func (l *Lox) Run(source string) {
 	s := scanner.NewScanner(source)
-	tokens, err := s.ScanTokens()
-	if err {
-		fmt.Println("Error scanning tokens: %w", err)
-	}
+	tokens, _ := s.ScanTokens()
+	// if err {
+	// 	fmt.Println("Error scanning tokens: %w", err)
+	// }
 
 	p := parser.NewParser(tokens)
-	stmts, err := p.Parse()
-	if err {
-		fmt.Println("Error parsing: %w", err)
+	stmts, _ := p.Parse()
+	// if err {
+	// 	fmt.Println("Error parsing: %w", err)
+	// 	return
+	// }
+
+	r := resolver.NewResolver(l.interpreter)
+	err := r.Resolve(stmts)
+	if err != nil {
+		fmt.Println(err)
+		l.HadCompilerError = true
 		return
 	}
 
-	l.interpreter.Interpret(stmts) // Keep the same interpreter instance
+	l.interpreter.Interpret(stmts)
 }
 
 func (l *Lox) RunPrompt() {

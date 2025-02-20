@@ -13,6 +13,7 @@ import (
 type Interpreter struct {
 	globals     *environment.Environment
 	environment *environment.Environment
+	locals      map[expr.Expr]int
 }
 
 func NewInterpreter() *Interpreter {
@@ -23,6 +24,7 @@ func NewInterpreter() *Interpreter {
 	return &Interpreter{
 		globals:     globals,
 		environment: globals,
+		locals:      make(map[expr.Expr]int),
 	}
 }
 
@@ -30,6 +32,7 @@ func (i *Interpreter) Interpret(stmts []stmt.Stmt) error {
 	for _, stmt := range stmts {
 		_, err := i.execute(stmt)
 		if err != nil {
+			fmt.Println(err)
 			return err
 		}
 	}
@@ -63,6 +66,10 @@ func (i *Interpreter) executeBlock(stmts []stmt.Stmt, env *environment.Environme
 		}
 	}
 	return stmt.ReturnValue{}, nil
+}
+
+func (i *Interpreter) Resolve(e expr.Expr, depth int) {
+	i.locals[e] = depth
 }
 
 // ================================================================================
@@ -114,11 +121,7 @@ func (i *Interpreter) VisitUnaryExpr(expr expr.Unary) (interface{}, error) {
 }
 
 func (i *Interpreter) VisitVariableExpr(expr expr.Variable) (interface{}, error) {
-	value, err := i.environment.Get(expr.Name)
-	if err != nil {
-		return nil, err
-	}
-	return value, nil
+	return i.lookupVariable(expr.Name, expr)
 }
 
 func (i *Interpreter) VisitBinaryExpr(expr expr.Binary) (interface{}, error) {
@@ -200,10 +203,19 @@ func (i *Interpreter) VisitAssignExpr(expr expr.Assign) (interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	err = i.environment.Assign(expr.Name, value)
-	if err != nil {
-		return nil, err
+
+	if distance, ok := i.locals[expr]; ok {
+		err := i.environment.AssignAt(distance, expr.Name, value)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		err := i.globals.Assign(expr.Name, value)
+		if err != nil {
+			return nil, err
+		}
 	}
+
 	return value, nil
 }
 
@@ -303,6 +315,15 @@ func (i *Interpreter) VisitWhileStmt(s stmt.While) (stmt.ReturnValue, error) {
 // ================================================================================
 // ### HELPERS
 // ================================================================================
+
+func (i *Interpreter) lookupVariable(name *token.Token, e expr.Expr) (interface{}, error) {
+	distance := i.locals[e]
+	if distance != 0 {
+		return i.environment.GetAt(distance, name.Lexeme)
+	} else {
+		return i.globals.Get(name)
+	}
+}
 
 func checkNumOperand(operator *token.Token, operand interface{}) {
 	if _, ok := operand.(int); !ok {
