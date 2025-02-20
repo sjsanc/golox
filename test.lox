@@ -1,11 +1,7 @@
-print "lol";
+var a = "hi";
 
-var a = 10;
-
-print a;
-
-fun sayHi() {
-  print "hi";
+fun sayHello(a) {
+    print a;
 }
 
-sayHi();
+sayHello("lol");
