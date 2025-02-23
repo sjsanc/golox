@@ -73,7 +73,27 @@ func (i *Interpreter) visitBlockStmt(stmt *BlockStmt) (StmtReturn, error) {
 }
 
 func (i *Interpreter) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
+	var superclass interface{}
+	if stmt.superclass != nil {
+		val, err := i.evaluate(stmt.superclass)
+		if err != nil {
+			return StmtReturn{}, err
+		}
+
+		val, ok := val.(Class) // Type assertion
+		if !ok {
+			i.error(stmt.superclass.name, "Superclass must be a class") // Ensure 'Name' exists
+			return StmtReturn{}, nil
+		}
+		superclass = val
+	}
+
 	i.environment.Define(stmt.name.lexeme, nil)
+
+	if stmt.superclass != nil {
+		environment := NewEnvironment(i.environment)
+		environment.Define("super", superclass)
+	}
 
 	methods := make(map[string]*Function)
 	for _, method := range stmt.methods {
@@ -81,7 +101,10 @@ func (i *Interpreter) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
 		methods[method.name.lexeme] = function
 	}
 
-	class := &Class{stmt.name.lexeme, methods}
+	class := NewClass(stmt.name.lexeme, superclass.(*Class), methods)
+	if superclass != nil {
+		i.environment = i.environment.enclosing
+	}
 	i.environment.Assign(stmt.name, class)
 	return StmtReturn{}, nil
 }
@@ -328,6 +351,28 @@ func (i *Interpreter) visitSetExpr(expr *SetExpr) (interface{}, error) {
 		return value, nil
 	}
 	return nil, i.error(expr.name, "Only instances have fields")
+}
+
+func (i *Interpreter) visitSuperExpr(expr *SuperExpr) (interface{}, error) {
+	distance := i.locals[expr]
+	superclass, err := i.environment.GetAt(distance, "super")
+	if err != nil {
+		return nil, err
+	}
+
+	object, err := i.environment.GetAt(distance-1, "this")
+	if err != nil {
+		return nil, err
+	}
+
+	method := superclass.(*Class).FindMethod(expr.method.lexeme)
+
+	if method == nil {
+		i.error(expr.method, "undefined property"+expr.method.lexeme+"'.")
+		return nil, nil
+	}
+
+	return method.Bind(object.(*Instance)), nil
 }
 
 func (i *Interpreter) visitThisExpr(expr *ThisExpr) (interface{}, error) {

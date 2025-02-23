@@ -14,8 +14,9 @@ const (
 type ClassType string
 
 const (
-	ClassNone  ClassType = "none"
-	ClassClass ClassType = "class"
+	ClassNone     ClassType = "none"
+	ClassClass    ClassType = "class"
+	ClassSubclass ClassType = "subclass"
 )
 
 type Resolver struct {
@@ -92,8 +93,24 @@ func (r *Resolver) visitBlockStmt(stmt *BlockStmt) (StmtReturn, error) {
 func (r *Resolver) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
 	enclosingClass := r.currentClass
 	r.currentClass = ClassClass
+
 	r.declare(stmt.name)
 	r.define(stmt.name)
+
+	if stmt.superclass != nil && stmt.name.lexeme == stmt.superclass.name.lexeme {
+		r.error(stmt.superclass.name, "A class can't inherit from itself")
+	}
+
+	if stmt.superclass != nil {
+		r.currentClass = ClassSubclass
+		r.resolveExpr(stmt.superclass)
+	}
+
+	if stmt.superclass != nil {
+		r.beginScope()
+		r.scopes.Peek()["super"] = true
+	}
+
 	r.beginScope()
 	r.scopes.Peek()["this"] = true
 	for _, method := range stmt.methods {
@@ -104,6 +121,9 @@ func (r *Resolver) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
 		r.resolveFunction(method, declaration)
 	}
 	r.endScope()
+	if stmt.superclass != nil {
+		r.endScope()
+	}
 	r.currentClass = enclosingClass
 	return StmtReturn{}, nil
 }
@@ -210,6 +230,16 @@ func (r *Resolver) visitLogicalExpr(expr *LogicalExpr) (interface{}, error) {
 func (r *Resolver) visitSetExpr(expr *SetExpr) (interface{}, error) {
 	r.resolveExpr(expr.value)
 	r.resolveExpr(expr.object)
+	return nil, nil
+}
+
+func (r *Resolver) visitSuperExpr(expr *SuperExpr) (interface{}, error) {
+	if r.currentClass == ClassNone {
+		r.error(expr.keyword, "can't use 'super' outside of a class")
+	} else if r.currentClass != ClassSubclass {
+		r.error(expr.keyword, "can't use 'super' in a class with no subclass")
+	}
+	r.resolveLocal(expr, expr.keyword)
 	return nil, nil
 }
 

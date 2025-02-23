@@ -13,6 +13,7 @@ type ExprVisitor interface {
 	visitLiteralExpr(expr *LiteralExpr) (interface{}, error)
 	visitLogicalExpr(expr *LogicalExpr) (interface{}, error)
 	visitSetExpr(expr *SetExpr) (interface{}, error)
+	visitSuperExpr(expr *SuperExpr) (interface{}, error)
 	visitThisExpr(expr *ThisExpr) (interface{}, error)
 	visitUnaryExpr(expr *UnaryExpr) (interface{}, error)
 	visitVariableExpr(expr *VariableExpr) (interface{}, error)
@@ -122,6 +123,19 @@ type SetExpr struct {
 
 func (expr *SetExpr) Accept(v ExprVisitor) (interface{}, error) {
 	return v.visitSetExpr(expr)
+}
+
+// ================================================================================
+// ### SUPER
+// ================================================================================
+
+type SuperExpr struct {
+	keyword *Token
+	method  *Token
+}
+
+func (expr *SuperExpr) Accept(v ExprVisitor) (interface{}, error) {
+	return v.visitSuperExpr(expr)
 }
 
 // ================================================================================

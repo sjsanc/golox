@@ -1,20 +1,25 @@
 package tw
 
 type Class struct {
-	name    string
-	methods map[string]*Function
+	name       string
+	superclass *Class
+	methods    map[string]*Function
 }
 
-func NewClass(name string) *Class {
+func NewClass(name string, superclass *Class, methods map[string]*Function) *Class {
 	return &Class{
-		name:    name,
-		methods: make(map[string]*Function),
+		name:       name,
+		superclass: superclass,
+		methods:    methods,
 	}
 }
 
 func (c *Class) FindMethod(name string) *Function {
 	if method, ok := c.methods[name]; ok {
 		return method
+	}
+	if c.superclass != nil {
+		return c.superclass.FindMethod(name)
 	}
 	return nil
 }

@@ -38,8 +38,9 @@ func (stmt *BlockStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 // ================================================================================
 
 type ClassStmt struct {
-	name    *Token
-	methods []*FunctionStmt
+	name       *Token
+	superclass *VariableExpr
+	methods    []*FunctionStmt
 }
 
 func (stmt *ClassStmt) Accept(v StmtVisitor) (StmtReturn, error) {
