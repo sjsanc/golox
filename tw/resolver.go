@@ -2,25 +2,46 @@ package tw
 
 import "fmt"
 
+type FunctionType string
+
+const (
+	FunctionNone        FunctionType = "none"
+	FunctionFunction    FunctionType = "function"
+	FunctionInitializer FunctionType = "initializer"
+	FunctionMethod      FunctionType = "method"
+)
+
+type ClassType string
+
+const (
+	ClassNone  ClassType = "none"
+	ClassClass ClassType = "class"
+)
+
 type Resolver struct {
-	interpreter *Interpreter
-	scopes      Stack[map[string]bool]
-	currentFn   FunctionType
-	hadErr      bool
+	interpreter  *Interpreter
+	scopes       Stack[map[string]bool]
+	currentFn    FunctionType
+	currentClass ClassType
+	hadErr       bool
 }
 
 func NewResolver(interpreter *Interpreter) *Resolver {
 	return &Resolver{
-		interpreter: interpreter,
-		scopes:      Stack[map[string]bool]{},
-		currentFn:   FunctionNone,
-		hadErr:      false,
+		interpreter:  interpreter,
+		scopes:       Stack[map[string]bool]{},
+		currentFn:    FunctionNone,
+		currentClass: ClassNone,
+		hadErr:       false,
 	}
 }
 
 func (r *Resolver) Resolve(stmts []Stmt) bool {
 	for _, stmt := range stmts {
 		r.resolveStmt(stmt)
+		if r.hadErr {
+			return true
+		}
 	}
 	return r.hadErr
 }
@@ -42,7 +63,7 @@ func (r *Resolver) resolveLocal(expr Expr, name *Token) {
 	}
 }
 
-func (r *Resolver) resolveFunction(stmt FunctionStmt, ftype FunctionType) {
+func (r *Resolver) resolveFunction(stmt *FunctionStmt, ftype FunctionType) {
 	enclosingFn := r.currentFn
 	r.currentFn = ftype
 
@@ -61,25 +82,38 @@ func (r *Resolver) resolveFunction(stmt FunctionStmt, ftype FunctionType) {
 // ### STMT VISITORS
 // ================================================================================
 
-func (r *Resolver) visitBlockStmt(stmt BlockStmt) (StmtReturn, error) {
+func (r *Resolver) visitBlockStmt(stmt *BlockStmt) (StmtReturn, error) {
 	r.beginScope()
 	r.Resolve(stmt.stmts)
 	r.endScope()
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitClassStmt(stmt ClassStmt) (StmtReturn, error) {
+func (r *Resolver) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
+	enclosingClass := r.currentClass
+	r.currentClass = ClassClass
 	r.declare(stmt.name)
 	r.define(stmt.name)
+	r.beginScope()
+	r.scopes.Peek()["this"] = true
+	for _, method := range stmt.methods {
+		declaration := FunctionMethod
+		if method.name.lexeme == "init" {
+			declaration = FunctionInitializer
+		}
+		r.resolveFunction(method, declaration)
+	}
+	r.endScope()
+	r.currentClass = enclosingClass
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitExpressionStmt(stmt ExpressionStmt) (StmtReturn, error) {
+func (r *Resolver) visitExpressionStmt(stmt *ExpressionStmt) (StmtReturn, error) {
 	r.resolveExpr(stmt.expr)
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error) {
+func (r *Resolver) visitFunctionStmt(stmt *FunctionStmt) (StmtReturn, error) {
 	r.declare(stmt.name)
 	r.define(stmt.name)
 
@@ -87,7 +121,7 @@ func (r *Resolver) visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitIfStmt(stmt IfStmt) (StmtReturn, error) {
+func (r *Resolver) visitIfStmt(stmt *IfStmt) (StmtReturn, error) {
 	r.resolveExpr(stmt.condition)
 	r.resolveStmt(stmt.thenBranch)
 	if stmt.elseBranch != nil {
@@ -96,22 +130,25 @@ func (r *Resolver) visitIfStmt(stmt IfStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitPrintStmt(stmt PrintStmt) (StmtReturn, error) {
+func (r *Resolver) visitPrintStmt(stmt *PrintStmt) (StmtReturn, error) {
 	r.resolveExpr(stmt.expr)
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitReturnStmt(stmt ReturnStmt) (StmtReturn, error) {
+func (r *Resolver) visitReturnStmt(stmt *ReturnStmt) (StmtReturn, error) {
 	if r.currentFn == FunctionNone {
 		r.error(stmt.keyword, "Cannot return from top-level code.")
 	}
 	if stmt.value != nil {
+		if r.currentFn == FunctionInitializer {
+			r.error(stmt.keyword, "Cannot return a value from an initializer.")
+		}
 		r.resolveExpr(stmt.value)
 	}
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitVarStmt(stmt VarStmt) (StmtReturn, error) {
+func (r *Resolver) visitVarStmt(stmt *VarStmt) (StmtReturn, error) {
 	r.declare(stmt.name)
 	if stmt.initializer != nil {
 		r.resolveExpr(stmt.initializer)
@@ -120,7 +157,7 @@ func (r *Resolver) visitVarStmt(stmt VarStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (r *Resolver) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
+func (r *Resolver) visitWhileStmt(stmt *WhileStmt) (StmtReturn, error) {
 	r.resolveExpr(stmt.condition)
 	r.resolveStmt(stmt.body)
 	return StmtReturn{}, nil
@@ -130,19 +167,19 @@ func (r *Resolver) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
 // ### EXPR VISITORS
 // ================================================================================
 
-func (r *Resolver) visitAssignExpr(expr AssignExpr) (interface{}, error) {
+func (r *Resolver) visitAssignExpr(expr *AssignExpr) (interface{}, error) {
 	r.resolveExpr(expr.value)
 	r.resolveLocal(expr, expr.name)
 	return nil, nil
 }
 
-func (r *Resolver) visitBinaryExpr(expr BinaryExpr) (interface{}, error) {
+func (r *Resolver) visitBinaryExpr(expr *BinaryExpr) (interface{}, error) {
 	r.resolveExpr(expr.left)
 	r.resolveExpr(expr.right)
 	return nil, nil
 }
 
-func (r *Resolver) visitCallExpr(expr CallExpr) (interface{}, error) {
+func (r *Resolver) visitCallExpr(expr *CallExpr) (interface{}, error) {
 	r.resolveExpr(expr.callee)
 	for _, arg := range expr.args {
 		r.resolveExpr(arg)
@@ -150,29 +187,50 @@ func (r *Resolver) visitCallExpr(expr CallExpr) (interface{}, error) {
 	return nil, nil
 }
 
-func (r *Resolver) visitGroupingExpr(expr GroupingExpr) (interface{}, error) {
+func (r *Resolver) visitGetExpr(expr *GetExpr) (interface{}, error) {
+	r.resolveExpr(expr.object)
+	return nil, nil
+}
+
+func (r *Resolver) visitGroupingExpr(expr *GroupingExpr) (interface{}, error) {
 	r.resolveExpr(expr.expr)
 	return nil, nil
 }
 
-func (r *Resolver) visitLiteralExpr(expr LiteralExpr) (interface{}, error) {
+func (r *Resolver) visitLiteralExpr(expr *LiteralExpr) (interface{}, error) {
 	return nil, nil
 }
 
-func (r *Resolver) visitLogicalExpr(expr LogicalExpr) (interface{}, error) {
+func (r *Resolver) visitLogicalExpr(expr *LogicalExpr) (interface{}, error) {
 	r.resolveExpr(expr.left)
 	r.resolveExpr(expr.right)
 	return nil, nil
 }
 
-func (r *Resolver) visitUnaryExpr(expr UnaryExpr) (interface{}, error) {
+func (r *Resolver) visitSetExpr(expr *SetExpr) (interface{}, error) {
+	r.resolveExpr(expr.value)
+	r.resolveExpr(expr.object)
+	return nil, nil
+}
+
+func (r *Resolver) visitThisExpr(expr *ThisExpr) (interface{}, error) {
+	if r.currentClass == ClassNone {
+		r.error(expr.keyword, "Cannot use 'this' outside of a class.")
+		return nil, nil
+	}
+
+	r.resolveLocal(expr, expr.keyword)
+	return nil, nil
+}
+
+func (r *Resolver) visitUnaryExpr(expr *UnaryExpr) (interface{}, error) {
 	r.resolveExpr(expr.right)
 	return nil, nil
 }
 
-func (r *Resolver) visitVariableExpr(expr VariableExpr) (interface{}, error) {
+func (r *Resolver) visitVariableExpr(expr *VariableExpr) (interface{}, error) {
 	if !r.scopes.IsEmpty() {
-		if _, ok := r.scopes.Peek()[expr.name.lexeme]; !ok {
+		if val, ok := r.scopes.Peek()[expr.name.lexeme]; ok && !val {
 			r.error(expr.name, "Cannot read local variable in its own initializer.")
 		}
 	}

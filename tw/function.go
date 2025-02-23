@@ -4,23 +4,24 @@ import (
 	"fmt"
 )
 
-type FunctionType string
-
-const (
-	FunctionNone     FunctionType = "none"
-	FunctionFunction FunctionType = "function"
-)
-
 type Function struct {
-	declaration FunctionStmt
-	closure     *Environment
+	declaration   *FunctionStmt
+	closure       *Environment
+	isInitializer bool
 }
 
-func NewFunction(declaration FunctionStmt, closure *Environment) *Function {
+func NewFunction(declaration *FunctionStmt, closure *Environment, isInitializer bool) *Function {
 	return &Function{
-		declaration: declaration,
-		closure:     closure,
+		declaration:   declaration,
+		closure:       closure,
+		isInitializer: isInitializer,
 	}
+}
+
+func (f *Function) Bind(instance *Instance) *Function {
+	env := NewEnvironment(f.closure)
+	env.Define("this", instance)
+	return NewFunction(f.declaration, env, f.isInitializer)
 }
 
 func (f *Function) Arity() int {
@@ -35,7 +36,14 @@ func (f *Function) Call(interpreter *Interpreter, args []interface{}) (interface
 
 	val, err := interpreter.executeBlock(f.declaration.body, env)
 	if err != nil {
+		if f.isInitializer {
+			return f.closure.GetAt(0, "this")
+		}
 		return nil, err
+	}
+
+	if f.isInitializer {
+		return f.closure.GetAt(0, "this")
 	}
 
 	return val.value, nil

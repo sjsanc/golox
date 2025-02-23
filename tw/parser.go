@@ -165,9 +165,9 @@ func (p *Parser) varDeclaration() Stmt {
 func (p *Parser) classDeclaration() Stmt {
 	name := p.consume(IDENTIFIER, "Expect class name.")
 	p.consume(LEFT_BRACE, "Expect '{' before class body.")
-	methods := make([]FunctionStmt, 0)
+	methods := make([]*FunctionStmt, 0)
 	for !p.check(RIGHT_BRACE) && !p.isAtEnd() {
-		methods = append(methods, p.function("method").(FunctionStmt))
+		methods = append(methods, p.function("method").(*FunctionStmt))
 	}
 	p.consume(RIGHT_BRACE, "Expect '}' after class body.")
 	return &ClassStmt{name: name, methods: methods}
@@ -211,6 +211,9 @@ func (p *Parser) assignment() Expr {
 		value := p.assignment()
 		if expr, ok := expr.(*VariableExpr); ok {
 			return &AssignExpr{name: expr.name, value: value}
+		}
+		if expr, ok := expr.(*GetExpr); ok {
+			return &SetExpr{object: expr.object, name: expr.name, value: value}
 		}
 		p.error(equals, "Invalid assignment target.")
 	}
@@ -291,6 +294,9 @@ func (p *Parser) call() Expr {
 	for {
 		if p.match(LEFT_PAREN) {
 			expr = p.finishCall(expr)
+		} else if p.match(DOT) {
+			name := p.consume(IDENTIFIER, "Expect property name after '.'.")
+			expr = &GetExpr{object: expr, name: name}
 		} else {
 			break
 		}
@@ -326,15 +332,20 @@ func (p *Parser) primary() Expr {
 	if p.match(NUMBER, STRING) {
 		return &LiteralExpr{value: p.previous().literal}
 	}
+	if p.match(THIS) {
+		return &ThisExpr{keyword: p.previous()}
+	}
+	if p.match(IDENTIFIER) {
+		return &VariableExpr{name: p.previous()}
+	}
 	if p.match(LEFT_PAREN) {
 		expr := p.expression()
 		p.consume(RIGHT_PAREN, "Expect ')' after expression.")
 		return &GroupingExpr{expr: expr}
 	}
-	if p.match(IDENTIFIER) {
-		return &VariableExpr{name: p.previous()}
-	}
-	panic("Expect expression.")
+
+	p.error(p.peek(), "expected an expression. Last token was: "+p.peek().lexeme)
+	return nil
 }
 
 // ================================================================================
@@ -354,7 +365,8 @@ func (p *Parser) consume(ttype TokenType, message string) *Token {
 	if p.check(ttype) {
 		return p.advance()
 	}
-	panic(message)
+	p.error(p.peek(), message)
+	return nil
 }
 func (p *Parser) check(ttype TokenType) bool {
 	if p.isAtEnd() {
@@ -395,6 +407,6 @@ func (p *Parser) synchronize() {
 }
 
 func (p *Parser) error(token *Token, msg string) {
-	fmt.Println("[line", token.line, "] Error", msg)
+	fmt.Printf("[line %d] error: %s\n", token.line, msg)
 	p.hadErr = true
 }

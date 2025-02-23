@@ -68,18 +68,25 @@ func (i *Interpreter) executeBlock(stmts []Stmt, env *Environment) (StmtReturn, 
 // ### STMT VISITORS
 // ================================================================================
 
-func (i *Interpreter) visitBlockStmt(stmt BlockStmt) (StmtReturn, error) {
+func (i *Interpreter) visitBlockStmt(stmt *BlockStmt) (StmtReturn, error) {
 	return i.executeBlock(stmt.stmts, NewEnvironment(i.environment))
 }
 
-func (i *Interpreter) visitClassStmt(stmt ClassStmt) (StmtReturn, error) {
+func (i *Interpreter) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
 	i.environment.Define(stmt.name.lexeme, nil)
-	class := &Class{stmt.name.lexeme}
+
+	methods := make(map[string]*Function)
+	for _, method := range stmt.methods {
+		function := NewFunction(method, i.environment, method.name.lexeme == "init")
+		methods[method.name.lexeme] = function
+	}
+
+	class := &Class{stmt.name.lexeme, methods}
 	i.environment.Assign(stmt.name, class)
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitExpressionStmt(stmt ExpressionStmt) (StmtReturn, error) {
+func (i *Interpreter) visitExpressionStmt(stmt *ExpressionStmt) (StmtReturn, error) {
 	_, err := i.evaluate(stmt.expr)
 	if err != nil {
 		return StmtReturn{}, err
@@ -87,13 +94,13 @@ func (i *Interpreter) visitExpressionStmt(stmt ExpressionStmt) (StmtReturn, erro
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error) {
-	function := &Function{stmt, i.environment}
+func (i *Interpreter) visitFunctionStmt(stmt *FunctionStmt) (StmtReturn, error) {
+	function := NewFunction(stmt, i.environment, false)
 	i.environment.Define(stmt.name.lexeme, function)
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitIfStmt(stmt IfStmt) (StmtReturn, error) {
+func (i *Interpreter) visitIfStmt(stmt *IfStmt) (StmtReturn, error) {
 	condition, err := i.evaluate(stmt.condition)
 	if err != nil {
 		return StmtReturn{}, err
@@ -106,7 +113,7 @@ func (i *Interpreter) visitIfStmt(stmt IfStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitPrintStmt(stmt PrintStmt) (StmtReturn, error) {
+func (i *Interpreter) visitPrintStmt(stmt *PrintStmt) (StmtReturn, error) {
 	value, err := i.evaluate(stmt.expr)
 	if err != nil {
 		return StmtReturn{}, err
@@ -115,7 +122,7 @@ func (i *Interpreter) visitPrintStmt(stmt PrintStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitReturnStmt(stmt ReturnStmt) (StmtReturn, error) {
+func (i *Interpreter) visitReturnStmt(stmt *ReturnStmt) (StmtReturn, error) {
 	var value interface{}
 	if stmt.value != nil {
 		v, err := i.evaluate(stmt.value)
@@ -127,7 +134,7 @@ func (i *Interpreter) visitReturnStmt(stmt ReturnStmt) (StmtReturn, error) {
 	return StmtReturn{value, true}, nil
 }
 
-func (i *Interpreter) visitVarStmt(stmt VarStmt) (StmtReturn, error) {
+func (i *Interpreter) visitVarStmt(stmt *VarStmt) (StmtReturn, error) {
 	var value interface{}
 	if stmt.initializer != nil {
 		v, err := i.evaluate(stmt.initializer)
@@ -140,7 +147,7 @@ func (i *Interpreter) visitVarStmt(stmt VarStmt) (StmtReturn, error) {
 	return StmtReturn{}, nil
 }
 
-func (i *Interpreter) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
+func (i *Interpreter) visitWhileStmt(stmt *WhileStmt) (StmtReturn, error) {
 	for {
 		condition, err := i.evaluate(stmt.condition)
 		if err != nil {
@@ -164,7 +171,7 @@ func (i *Interpreter) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
 // ### EXPR VISITORS
 // ================================================================================
 
-func (i *Interpreter) visitAssignExpr(expr AssignExpr) (interface{}, error) {
+func (i *Interpreter) visitAssignExpr(expr *AssignExpr) (interface{}, error) {
 	value, err := i.evaluate(expr.value)
 	if err != nil {
 		return nil, err
@@ -178,7 +185,7 @@ func (i *Interpreter) visitAssignExpr(expr AssignExpr) (interface{}, error) {
 	return value, nil
 }
 
-func (i *Interpreter) visitBinaryExpr(expr BinaryExpr) (interface{}, error) {
+func (i *Interpreter) visitBinaryExpr(expr *BinaryExpr) (interface{}, error) {
 	left, err := i.evaluate(expr.left)
 	if err != nil {
 		return nil, err
@@ -249,7 +256,7 @@ func (i *Interpreter) visitBinaryExpr(expr BinaryExpr) (interface{}, error) {
 	return nil, nil
 }
 
-func (i *Interpreter) visitCallExpr(expr CallExpr) (interface{}, error) {
+func (i *Interpreter) visitCallExpr(expr *CallExpr) (interface{}, error) {
 	callee, err := i.evaluate(expr.callee)
 	if err != nil {
 		return nil, err
@@ -271,15 +278,26 @@ func (i *Interpreter) visitCallExpr(expr CallExpr) (interface{}, error) {
 	return nil, i.error(expr.paren, "Can only call functions and classes")
 }
 
-func (i *Interpreter) visitGroupingExpr(expr GroupingExpr) (interface{}, error) {
+func (i *Interpreter) visitGetExpr(expr *GetExpr) (interface{}, error) {
+	object, err := i.evaluate(expr.object)
+	if err != nil {
+		return nil, err
+	}
+	if instance, ok := object.(*Instance); ok {
+		return instance.Get(expr.name)
+	}
+	return nil, i.error(expr.name, "Only instances have properties")
+}
+
+func (i *Interpreter) visitGroupingExpr(expr *GroupingExpr) (interface{}, error) {
 	return i.evaluate(expr.expr)
 }
 
-func (i *Interpreter) visitLiteralExpr(expr LiteralExpr) (interface{}, error) {
+func (i *Interpreter) visitLiteralExpr(expr *LiteralExpr) (interface{}, error) {
 	return expr.value, nil
 }
 
-func (i *Interpreter) visitLogicalExpr(expr LogicalExpr) (interface{}, error) {
+func (i *Interpreter) visitLogicalExpr(expr *LogicalExpr) (interface{}, error) {
 	left, err := i.evaluate(expr.left)
 	if err != nil {
 		return nil, err
@@ -296,7 +314,27 @@ func (i *Interpreter) visitLogicalExpr(expr LogicalExpr) (interface{}, error) {
 	return i.evaluate(expr.right)
 }
 
-func (i *Interpreter) visitUnaryExpr(expr UnaryExpr) (interface{}, error) {
+func (i *Interpreter) visitSetExpr(expr *SetExpr) (interface{}, error) {
+	object, err := i.evaluate(expr.object)
+	if err != nil {
+		return nil, err
+	}
+	if instance, ok := object.(*Instance); ok {
+		value, err := i.evaluate(expr.value)
+		if err != nil {
+			return nil, err
+		}
+		instance.Set(expr.name, value)
+		return value, nil
+	}
+	return nil, i.error(expr.name, "Only instances have fields")
+}
+
+func (i *Interpreter) visitThisExpr(expr *ThisExpr) (interface{}, error) {
+	return i.lookupVariable(expr.keyword, expr)
+}
+
+func (i *Interpreter) visitUnaryExpr(expr *UnaryExpr) (interface{}, error) {
 	right, err := i.evaluate(expr.right)
 	if err != nil {
 		return nil, err
@@ -314,7 +352,7 @@ func (i *Interpreter) visitUnaryExpr(expr UnaryExpr) (interface{}, error) {
 	return nil, nil
 }
 
-func (i *Interpreter) visitVariableExpr(expr VariableExpr) (interface{}, error) {
+func (i *Interpreter) visitVariableExpr(expr *VariableExpr) (interface{}, error) {
 	return i.lookupVariable(expr.name, expr)
 }
 

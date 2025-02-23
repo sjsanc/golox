@@ -10,15 +10,15 @@ type Stmt interface {
 }
 
 type StmtVisitor interface {
-	visitBlockStmt(stmt BlockStmt) (StmtReturn, error)
-	visitClassStmt(stmt ClassStmt) (StmtReturn, error)
-	visitExpressionStmt(stmt ExpressionStmt) (StmtReturn, error)
-	visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error)
-	visitIfStmt(stmt IfStmt) (StmtReturn, error)
-	visitPrintStmt(stmt PrintStmt) (StmtReturn, error)
-	visitReturnStmt(stmt ReturnStmt) (StmtReturn, error)
-	visitVarStmt(stmt VarStmt) (StmtReturn, error)
-	visitWhileStmt(stmt WhileStmt) (StmtReturn, error)
+	visitBlockStmt(stmt *BlockStmt) (StmtReturn, error)
+	visitClassStmt(stmt *ClassStmt) (StmtReturn, error)
+	visitExpressionStmt(stmt *ExpressionStmt) (StmtReturn, error)
+	visitFunctionStmt(stmt *FunctionStmt) (StmtReturn, error)
+	visitIfStmt(stmt *IfStmt) (StmtReturn, error)
+	visitPrintStmt(stmt *PrintStmt) (StmtReturn, error)
+	visitReturnStmt(stmt *ReturnStmt) (StmtReturn, error)
+	visitVarStmt(stmt *VarStmt) (StmtReturn, error)
+	visitWhileStmt(stmt *WhileStmt) (StmtReturn, error)
 }
 
 // ================================================================================
@@ -29,7 +29,7 @@ type BlockStmt struct {
 	stmts []Stmt
 }
 
-func (stmt BlockStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *BlockStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitBlockStmt(stmt)
 }
 
@@ -39,10 +39,10 @@ func (stmt BlockStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 
 type ClassStmt struct {
 	name    *Token
-	methods []FunctionStmt
+	methods []*FunctionStmt
 }
 
-func (stmt ClassStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *ClassStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitClassStmt(stmt)
 }
 
@@ -54,7 +54,7 @@ type ExpressionStmt struct {
 	expr Expr
 }
 
-func (stmt ExpressionStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *ExpressionStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitExpressionStmt(stmt)
 }
 
@@ -68,7 +68,7 @@ type FunctionStmt struct {
 	body   []Stmt
 }
 
-func (stmt FunctionStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *FunctionStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitFunctionStmt(stmt)
 }
 
@@ -82,7 +82,7 @@ type IfStmt struct {
 	elseBranch Stmt
 }
 
-func (stmt IfStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *IfStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitIfStmt(stmt)
 }
 
@@ -94,7 +94,7 @@ type PrintStmt struct {
 	expr Expr
 }
 
-func (stmt PrintStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *PrintStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitPrintStmt(stmt)
 }
 
@@ -107,7 +107,7 @@ type ReturnStmt struct {
 	value   Expr
 }
 
-func (stmt ReturnStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *ReturnStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitReturnStmt(stmt)
 }
 
@@ -120,7 +120,7 @@ type VarStmt struct {
 	initializer Expr
 }
 
-func (stmt VarStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *VarStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitVarStmt(stmt)
 }
 
@@ -133,6 +133,6 @@ type WhileStmt struct {
 	body      Stmt
 }
 
-func (stmt WhileStmt) Accept(v StmtVisitor) (StmtReturn, error) {
+func (stmt *WhileStmt) Accept(v StmtVisitor) (StmtReturn, error) {
 	return v.visitWhileStmt(stmt)
 }

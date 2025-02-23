@@ -22,7 +22,7 @@ func (p *Printer) PrintStmt(stmt Stmt) string {
 // ### STATEMENTS
 // ================================================================================
 
-func (p *Printer) visitBlockStmt(stmt BlockStmt) (StmtReturn, error) {
+func (p *Printer) visitBlockStmt(stmt *BlockStmt) (StmtReturn, error) {
 	sb := new(strings.Builder)
 	sb.WriteString("(block ")
 	for _, s := range stmt.stmts {
@@ -33,7 +33,7 @@ func (p *Printer) visitBlockStmt(stmt BlockStmt) (StmtReturn, error) {
 	return StmtReturn{value: sb.String()}, nil
 }
 
-func (p *Printer) visitClassStmt(stmt ClassStmt) (StmtReturn, error) {
+func (p *Printer) visitClassStmt(stmt *ClassStmt) (StmtReturn, error) {
 	sb := new(strings.Builder)
 	sb.WriteString("(class ")
 	sb.WriteString(stmt.name.lexeme)
@@ -45,11 +45,11 @@ func (p *Printer) visitClassStmt(stmt ClassStmt) (StmtReturn, error) {
 	return StmtReturn{value: sb.String()}, nil
 }
 
-func (p *Printer) visitExpressionStmt(stmt ExpressionStmt) (StmtReturn, error) {
+func (p *Printer) visitExpressionStmt(stmt *ExpressionStmt) (StmtReturn, error) {
 	return StmtReturn{value: p.parenthesize(";", stmt.expr)}, nil
 }
 
-func (p *Printer) visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error) {
+func (p *Printer) visitFunctionStmt(stmt *FunctionStmt) (StmtReturn, error) {
 	sb := new(strings.Builder)
 	sb.WriteString("(fun " + stmt.name.lexeme + "(")
 	for _, param := range stmt.params {
@@ -67,32 +67,32 @@ func (p *Printer) visitFunctionStmt(stmt FunctionStmt) (StmtReturn, error) {
 	return StmtReturn{value: sb.String()}, nil
 }
 
-func (p *Printer) visitIfStmt(stmt IfStmt) (StmtReturn, error) {
+func (p *Printer) visitIfStmt(stmt *IfStmt) (StmtReturn, error) {
 	if stmt.elseBranch != nil {
 		return StmtReturn{value: p.parenthesize("if-else", stmt.condition, stmt.thenBranch, stmt.elseBranch)}, nil
 	}
 	return StmtReturn{value: p.parenthesize("if", stmt.condition, stmt.thenBranch)}, nil
 }
 
-func (p *Printer) visitPrintStmt(stmt PrintStmt) (StmtReturn, error) {
+func (p *Printer) visitPrintStmt(stmt *PrintStmt) (StmtReturn, error) {
 	return StmtReturn{value: p.parenthesize("print", stmt.expr)}, nil
 }
 
-func (p *Printer) visitReturnStmt(stmt ReturnStmt) (StmtReturn, error) {
+func (p *Printer) visitReturnStmt(stmt *ReturnStmt) (StmtReturn, error) {
 	if stmt.value != nil {
 		return StmtReturn{value: "(return)"}, nil
 	}
 	return StmtReturn{value: p.parenthesize("return", stmt.value)}, nil
 }
 
-func (p *Printer) visitVarStmt(stmt VarStmt) (StmtReturn, error) {
+func (p *Printer) visitVarStmt(stmt *VarStmt) (StmtReturn, error) {
 	if stmt.initializer != nil {
 		return StmtReturn{value: p.parenthesize("var", stmt.name, "=", stmt.initializer)}, nil
 	}
 	return StmtReturn{value: p.parenthesize("var", stmt.name)}, nil
 }
 
-func (p *Printer) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
+func (p *Printer) visitWhileStmt(stmt *WhileStmt) (StmtReturn, error) {
 	return StmtReturn{value: p.parenthesize("while", stmt.condition, stmt.body)}, nil
 }
 
@@ -100,42 +100,50 @@ func (p *Printer) visitWhileStmt(stmt WhileStmt) (StmtReturn, error) {
 // ### EXPRESSIONS
 // ================================================================================
 
-func (p *Printer) visitAssignExpr(expr AssignExpr) (interface{}, error) {
+func (p *Printer) visitAssignExpr(expr *AssignExpr) (interface{}, error) {
 	return p.parenthesize("=", expr.name.lexeme, expr.value), nil
 }
 
-func (p *Printer) visitBinaryExpr(expr BinaryExpr) (interface{}, error) {
+func (p *Printer) visitBinaryExpr(expr *BinaryExpr) (interface{}, error) {
 	return p.parenthesize(expr.operator.lexeme, expr.left, expr.right), nil
 }
 
-func (p *Printer) visitCallExpr(expr CallExpr) (interface{}, error) {
+func (p *Printer) visitCallExpr(expr *CallExpr) (interface{}, error) {
 	return p.parenthesize("call", expr.callee, expr.paren, expr.args), nil
 }
 
-// func (p *Printer) visitGetExpr(expr GetExpr) (interface{}, error) {
-// 	return p.parenthesize(".", expr.object, expr.name), nil
-// }
+func (p *Printer) visitGetExpr(expr *GetExpr) (interface{}, error) {
+	return p.parenthesize(".", expr.object, expr.name), nil
+}
 
-func (p *Printer) visitGroupingExpr(expr GroupingExpr) (interface{}, error) {
+func (p *Printer) visitGroupingExpr(expr *GroupingExpr) (interface{}, error) {
 	return p.parenthesize("group", expr.expr), nil
 }
 
-func (p *Printer) visitLiteralExpr(expr LiteralExpr) (interface{}, error) {
+func (p *Printer) visitLiteralExpr(expr *LiteralExpr) (interface{}, error) {
 	if expr.value == nil {
 		return "nil", nil
 	}
 	return fmt.Sprintf("%v", expr.value), nil
 }
 
-func (p *Printer) visitLogicalExpr(expr LogicalExpr) (interface{}, error) {
+func (p *Printer) visitLogicalExpr(expr *LogicalExpr) (interface{}, error) {
 	return p.parenthesize(expr.operator.lexeme, expr.left, expr.right), nil
 }
 
-func (p *Printer) visitUnaryExpr(expr UnaryExpr) (interface{}, error) {
+func (p *Printer) visitSetExpr(expr *SetExpr) (interface{}, error) {
+	return p.parenthesize("=", expr.object, expr.name, expr.value), nil
+}
+
+func (p *Printer) visitThisExpr(expr *ThisExpr) (interface{}, error) {
+	return "this", nil
+}
+
+func (p *Printer) visitUnaryExpr(expr *UnaryExpr) (interface{}, error) {
 	return p.parenthesize(expr.operator.lexeme, expr.right), nil
 }
 
-func (p *Printer) visitVariableExpr(expr VariableExpr) (interface{}, error) {
+func (p *Printer) visitVariableExpr(expr *VariableExpr) (interface{}, error) {
 	return expr.name.lexeme, nil
 }
 
